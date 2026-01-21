@@ -2,6 +2,8 @@
 
 This repo contains some stuff about reverse engineering the Hytale Client.
 
+To get started, check out the [docs](docs/)
+
 The code right now (specifically `main.rs`) is a hot mess with hardcoded paths and references to files that no longer exist.
 
 I have tried making all the other code not as shit as the main file.
