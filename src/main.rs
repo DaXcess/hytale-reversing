@@ -1,3 +1,5 @@
+#![allow(unused)] // Shush
+
 mod binary;
 mod embedded_meta;
 mod error;

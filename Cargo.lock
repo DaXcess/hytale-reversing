@@ -35,7 +35,7 @@ dependencies = [
  "paste",
  "patternscan",
  "pelite",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -451,6 +451,7 @@ checksum = "135b12329e5e3ce057a9f972339ea52bc954fe1e9358ef27f95e89716fbc5424"
 [[package]]
 name = "idalib"
 version = "0.7.2+9.2.250908"
+source = "git+https://github.com/DaXcess/idalib.git#d275b3416de7134b4169b32340473f4843f3e949"
 dependencies = [
  "anyhow",
  "autocxx",
@@ -464,6 +465,7 @@ dependencies = [
 [[package]]
 name = "idalib-build"
 version = "0.7.2+9.2.250908"
+source = "git+https://github.com/DaXcess/idalib.git#d275b3416de7134b4169b32340473f4843f3e949"
 dependencies = [
  "anyhow",
  "idalib-sys",
@@ -472,6 +474,7 @@ dependencies = [
 [[package]]
 name = "idalib-sys"
 version = "0.7.2+9.2.250908"
+source = "git+https://github.com/DaXcess/idalib.git#d275b3416de7134b4169b32340473f4843f3e949"
 dependencies = [
  "anyhow",
  "autocxx",
@@ -957,11 +960,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "2.0.17"
+version = "2.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f63587ca0f12b72a0600bcba1d40081f830876000bb46dd2337a3051618f4fc8"
+checksum = "4288b5bcbc7920c07a1149a35cf9590a2aa808e0bc1eafaade0b80947865fbc4"
 dependencies = [
- "thiserror-impl 2.0.17",
+ "thiserror-impl 2.0.18",
 ]
 
 [[package]]
@@ -977,9 +980,9 @@ dependencies = [
 
 [[package]]
 name = "thiserror-impl"
-version = "2.0.17"
+version = "2.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ff15c8ecd7de3849db632e14d18d2571fa09dfc5ed93479bc4485c7a517c913"
+checksum = "ebc4ee7f67670e9b64d05fa4253e753e016c6c95ff35b89b7941d6b856dec1d5"
 dependencies = [
  "proc-macro2",
  "quote",
