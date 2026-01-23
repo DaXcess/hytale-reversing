@@ -4,21 +4,14 @@ This Rust project was created to experiment with reverse engineering NativeAOT b
 
 To understand more about how this tool has came to be, check out the [NativeAOT Docs](../docs/nativeaot/README.md).
 
-The code right now (specifically `main.rs`) is a hot mess with hardcoded paths and references to files that no longer exist.
+## Usage
 
-I have tried making all the other code not as shit as the main file.
+```sh
+cargo run -- <path to HytaleClient.exe> dump-ida
+```
+
+Running the above command will generate a `hytale_def.json` file. To load this file into IDA, run the `hytale.py` script found in the `python` directory through IDAs "Script file..." menu item.
 
 ## Requirements
 
 - [Rust](https://rustup.rs/)
-- [Clang](https://releases.llvm.org/download.html) (google distro instructions if on Linux/MacOS)
-
-## Building
-
-```sh
-cargo update # makes sure that idalib is up-to-date
-```
-
-```
-cargo build
-```
