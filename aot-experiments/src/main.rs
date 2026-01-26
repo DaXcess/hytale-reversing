@@ -33,8 +33,8 @@ enum Command {
     /// List all assemblies compiled into this NativeAOT binary
     GetAssemblies,
 
-    /// List all types and their fields
-    GetFields,
+    /// List all types and metadata surrounding it
+    GetTypes,
 
     /// TODO
     CreateMetadataTree,
@@ -52,7 +52,7 @@ fn main() -> Result<()> {
 
     if let Err(why) = match args.command {
         Command::GetAssemblies => get_assemblies(binary),
-        Command::GetFields => get_fields(binary),
+        Command::GetTypes => get_fields(binary),
         Command::CreateMetadataTree => create_metadata_tree(binary),
         Command::DumpIDA => dump_ida(binary),
     } {
@@ -106,6 +106,31 @@ fn get_fields(pe: NativeAotBinary<'_>) -> Result<()> {
         for typ in types {
             let type_name = typ.get_full_name()?;
 
+            if !typ.base_type.is_nil() {
+                let base_name = match typ.base_type.handle_type() {
+                    Some(HandleType::TypeDefinition) => {
+                        match typ
+                            .base_type
+                            .to_handle::<TypeDefinitionHandle>()?
+                            .to_data(metadata)
+                            .and_then(|dat| dat.get_full_name())
+                        {
+                            Ok(name) => name,
+                            Err(_) => "Unknown TypeDefinition".to_string(),
+                        }
+                    }
+                    _ => format!(
+                        "{:?}",
+                        typ.base_type.handle_type().unwrap_or(HandleType::Null)
+                    ),
+                };
+
+                println!("{type_name} ({base_name})");
+            } else {
+                println!("{type_name}");
+            }
+
+            // Print fields
             if !matches!(typ.fields.count(), Ok(n) if n > 0) {
                 continue;
             }
@@ -114,7 +139,7 @@ fn get_fields(pe: NativeAotBinary<'_>) -> Result<()> {
                 continue;
             };
 
-            println!("{type_name}:");
+            println!(" - Fields:");
             for field in iter.flatten().flat_map(|hdl| hdl.to_data(metadata)) {
                 let name = field.name.to_data(metadata)?.value;
                 let signature = field.signature.to_data(metadata)?;
@@ -122,7 +147,7 @@ fn get_fields(pe: NativeAotBinary<'_>) -> Result<()> {
                 match signature.type_handle.handle_type() {
                     Some(HandleType::TypeDefinition) => {
                         println!(
-                            " - {name} ({})",
+                            "  * {name} ({})",
                             match signature
                                 .type_handle
                                 .to_handle::<TypeDefinitionHandle>()?

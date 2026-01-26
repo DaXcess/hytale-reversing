@@ -189,6 +189,14 @@ impl BaseHandle {
     pub fn handle_type(&self) -> Option<HandleType> {
         HandleType::try_from((self.0 >> 25) as u8).ok()
     }
+
+    pub fn offset(&self) -> u32 {
+        self.0 & 0x01FFFFFF
+    }
+
+    pub fn is_nil(&self) -> bool {
+        self.0 & 0x01FFFFFF == 0
+    }
 }
 
 impl Debug for BaseHandle {
