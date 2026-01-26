@@ -198,52 +198,6 @@ impl_handle!(Field, FieldHandle, {
     custom_attributes: CustomAttributeHandleCollection<'a>
 });
 
-impl<'a> NamespaceDefinition<'a> {
-    pub fn find_type(&self, name: &str) -> Option<TypeDefinition<'a>> {
-        let mut segments = name.split(".").peekable();
-        let mut current_ns = self.handle;
-
-        while segments.peek().is_some() && segments.clone().count() > 1 {
-            let segment = segments.next().unwrap();
-            let ns = current_ns.to_data(self.reader).ok()?;
-
-            let mut found = None;
-
-            for child_handle in ns.namespace_definitions.iter().ok()?.flatten() {
-                let child_ns = child_handle.to_data(self.reader).ok()?;
-
-                if child_ns.name.is_nil() {
-                    continue;
-                }
-
-                let child_name = child_ns.name.to_data(self.reader).ok()?.value;
-
-                if child_name == segment {
-                    found = Some(child_handle);
-                    break;
-                }
-            }
-
-            current_ns = found?;
-        }
-
-        let type_name = segments.next().unwrap();
-        let ns = current_ns.to_data(self.reader).ok()?;
-
-        for ty in ns
-            .type_definitions
-            .iter()
-            .ok()?
-            .flatten()
-            .flat_map(|hdl| hdl.to_data(self.reader))
-        {
-            let ty_name = ty.name.to_data(self.reader).ok()?;
-
-            if ty_name.value == type_name {
-                return Some(ty);
-            }
-        }
-
-        None
-    }
-}
+impl_handle!(FieldSignature, FieldSignatureHandle, {
+    type_handle: BaseHandle,
+});

@@ -6,10 +6,7 @@ mod error;
 mod ida;
 mod native_format;
 
-use std::{
-    io,
-    path::{Path, PathBuf},
-};
+use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::Parser;
@@ -36,6 +33,9 @@ enum Command {
     /// List all assemblies compiled into this NativeAOT binary
     GetAssemblies,
 
+    /// List all types and their fields
+    GetFields,
+
     /// TODO
     CreateMetadataTree,
 
@@ -52,8 +52,9 @@ fn main() -> Result<()> {
 
     if let Err(why) = match args.command {
         Command::GetAssemblies => get_assemblies(binary),
+        Command::GetFields => get_fields(binary),
         Command::CreateMetadataTree => create_metadata_tree(binary),
-        Command::DumpIDA => dump_ida(binary, &args.file),
+        Command::DumpIDA => dump_ida(binary),
     } {
         eprintln!("Error: {why}");
     }
@@ -87,8 +88,72 @@ fn get_assemblies(pe: NativeAotBinary<'_>) -> Result<()> {
     Ok(())
 }
 
-fn create_metadata_tree(pe: NativeAotBinary<'_>) -> Result<()> {
+fn get_fields(pe: NativeAotBinary<'_>) -> Result<()> {
     let Some(metadata) = pe.rtr_header().metadata() else {
+        eprintln!("Image is missing a metadata section");
+        return Ok(());
+    };
+
+    for def in metadata
+        .header()
+        .scope_definitions()
+        .iter()?
+        .flatten()
+        .flat_map(|hdl| hdl.to_data(metadata))
+    {
+        let types = def.get_all_types()?;
+
+        for typ in types {
+            let type_name = typ.get_full_name()?;
+
+            if !matches!(typ.fields.count(), Ok(n) if n > 0) {
+                continue;
+            }
+
+            let Ok(iter) = typ.fields.iter() else {
+                continue;
+            };
+
+            println!("{type_name}:");
+            for field in iter.flatten().flat_map(|hdl| hdl.to_data(metadata)) {
+                let name = field.name.to_data(metadata)?.value;
+                let signature = field.signature.to_data(metadata)?;
+
+                match signature.type_handle.handle_type() {
+                    Some(HandleType::TypeDefinition) => {
+                        println!(
+                            " - {name} ({})",
+                            match signature
+                                .type_handle
+                                .to_handle::<TypeDefinitionHandle>()?
+                                .to_data(metadata)
+                                .and_then(|dat| dat.get_full_name())
+                            {
+                                Ok(name) => name,
+                                Err(_) => "Unknown TypeDefinition".to_string(),
+                            }
+                        );
+                    }
+
+                    _ => {
+                        println!(
+                            " - {name} ({:?})",
+                            signature
+                                .type_handle
+                                .handle_type()
+                                .unwrap_or(HandleType::Null)
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn create_metadata_tree(pe: NativeAotBinary<'_>) -> Result<()> {
+    let Some(_metadata) = pe.rtr_header().metadata() else {
         eprintln!("Image is missing a metadata section");
         return Ok(());
     };
@@ -98,7 +163,7 @@ fn create_metadata_tree(pe: NativeAotBinary<'_>) -> Result<()> {
     Ok(())
 }
 
-fn dump_ida(pe: NativeAotBinary<'_>, file: &Path) -> Result<()> {
+fn dump_ida(pe: NativeAotBinary<'_>) -> Result<()> {
     // -- Check if this is a Hytale binary
     const REQUIRED_ASSEMBLIES: &[&str] = &[
         "Hytale.Nat",
