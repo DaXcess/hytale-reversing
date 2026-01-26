@@ -6,15 +6,19 @@ mod error;
 mod ida;
 mod native_format;
 
-use std::path::PathBuf;
+use std::{collections::HashMap, path::PathBuf};
 
 use anyhow::Result;
 use clap::Parser;
-use pelite::pe64::PeFile;
+use pelite::pe64::{Pe, PeFile};
 
 use crate::{
     binary::{NativeAotBinary, headers::rtr::ReflectionMapBlob},
-    embedded_meta::handles::{BaseHandle, HandleType, MethodHandle, TypeDefinitionHandle},
+    embedded_meta::{
+        Method, TypeDefinition,
+        flags::MethodMemberAccess,
+        handles::{BaseHandle, HandleType, MethodHandle, TypeDefinitionHandle},
+    },
 };
 
 #[derive(Parser, Debug)]
@@ -52,7 +56,7 @@ fn main() -> Result<()> {
 
     if let Err(why) = match args.command {
         Command::GetAssemblies => get_assemblies(binary),
-        Command::GetTypes => get_fields(binary),
+        Command::GetTypes => get_types(binary),
         Command::CreateMetadataTree => create_metadata_tree(binary),
         Command::DumpIDA => dump_ida(binary),
     } {
@@ -88,11 +92,51 @@ fn get_assemblies(pe: NativeAotBinary<'_>) -> Result<()> {
     Ok(())
 }
 
-fn get_fields(pe: NativeAotBinary<'_>) -> Result<()> {
+fn get_types(pe: NativeAotBinary<'_>) -> Result<()> {
+    struct MethodDef<'a> {
+        method: Method<'a>,
+        parent: TypeDefinition<'a>,
+    }
+
     let Some(metadata) = pe.rtr_header().metadata() else {
         eprintln!("Image is missing a metadata section");
         return Ok(());
     };
+
+    let Some(invoke_table) = pe.rtr_header().blob_hashtable(ReflectionMapBlob::InvokeMap) else {
+        eprintln!("Image is missing an invoke table");
+        return Ok(());
+    };
+
+    let Some(fixups) = pe.rtr_header().common_fixups_table() else {
+        eprintln!("Image is missing a common fixups table");
+        return Ok(());
+    };
+
+    // Step 1.
+    // Find potential method pointers
+    let mut method_ptrs = HashMap::new();
+
+    for mut parser in invoke_table.enumerate_all()? {
+        let invoke_flags = parser.get_unsigned()?;
+        let meta_handle = BaseHandle::from_raw(parser.get_unsigned()?);
+        let _entry_type = parser.get_unsigned()?;
+        let fixup_idx = parser.get_unsigned()?;
+
+        if (invoke_flags & 32) == 0 {
+            continue;
+        }
+
+        let Ok(method_handle) = meta_handle.to_handle::<MethodHandle>() else {
+            continue;
+        };
+
+        let Some(va) = fixups.get_va_from_index(fixup_idx) else {
+            continue;
+        };
+
+        method_ptrs.insert(method_handle, va);
+    }
 
     for def in metadata
         .header()
@@ -131,44 +175,129 @@ fn get_fields(pe: NativeAotBinary<'_>) -> Result<()> {
             }
 
             // Print fields
-            if !matches!(typ.fields.count(), Ok(n) if n > 0) {
-                continue;
+            if matches!(typ.fields.count(), Ok(n) if n > 0) {
+                let Ok(iter) = typ.fields.iter() else {
+                    continue;
+                };
+
+                println!(" - Fields:");
+                for field in iter.flatten().flat_map(|hdl| hdl.to_data(metadata)) {
+                    let name = field.name.to_data(metadata)?.value;
+                    let signature = field.signature.to_data(metadata)?;
+
+                    match signature.type_handle.handle_type() {
+                        Some(HandleType::TypeDefinition) => {
+                            println!(
+                                "  * {name} ({})",
+                                match signature
+                                    .type_handle
+                                    .to_handle::<TypeDefinitionHandle>()?
+                                    .to_data(metadata)
+                                    .and_then(|dat| dat.get_full_name())
+                                {
+                                    Ok(name) => name,
+                                    Err(_) => "Unknown TypeDefinition".to_string(),
+                                }
+                            );
+                        }
+
+                        _ => {
+                            println!(
+                                " - {name} ({:?})",
+                                signature
+                                    .type_handle
+                                    .handle_type()
+                                    .unwrap_or(HandleType::Null)
+                            );
+                        }
+                    }
+                }
             }
 
-            let Ok(iter) = typ.fields.iter() else {
-                continue;
-            };
+            // Print methods
+            if matches!(typ.methods.count(), Ok(n) if n > 0) {
+                let Ok(iter) = typ.methods.iter() else {
+                    continue;
+                };
 
-            println!(" - Fields:");
-            for field in iter.flatten().flat_map(|hdl| hdl.to_data(metadata)) {
-                let name = field.name.to_data(metadata)?.value;
-                let signature = field.signature.to_data(metadata)?;
+                println!(" - Methods:");
+                for method in iter.flatten().flat_map(|hdl| hdl.to_data(metadata)) {
+                    let name = method.name.to_data(metadata)?.value;
+                    let flags = method.flags;
 
-                match signature.type_handle.handle_type() {
-                    Some(HandleType::TypeDefinition) => {
-                        println!(
-                            "  * {name} ({})",
-                            match signature
-                                .type_handle
-                                .to_handle::<TypeDefinitionHandle>()?
-                                .to_data(metadata)
-                                .and_then(|dat| dat.get_full_name())
-                            {
-                                Ok(name) => name,
-                                Err(_) => "Unknown TypeDefinition".to_string(),
-                            }
-                        );
+                    let Ok(signature) = method.signature.to_data(metadata) else {
+                        continue;
+                    };
+
+                    let return_type = match signature.return_type {
+                        t if t.is_nil() => "void".to_string(),
+                        t if t.handle_type() == Some(HandleType::TypeDefinition) => {
+                            let Ok(typ) = t
+                                .to_handle::<TypeDefinitionHandle>()
+                                .and_then(|hdl| hdl.to_data(metadata))
+                            else {
+                                continue;
+                            };
+
+                            typ.get_full_name()?
+                        }
+                        _ => "<unknown>".to_string(),
+                    };
+
+                    print!("  * ");
+
+                    let access = match flags.member_access() {
+                        MethodMemberAccess::Assembly => "internal ",
+                        MethodMemberAccess::FamAndAssem => "private protected ",
+                        MethodMemberAccess::FamOrAssem => "internal protected ",
+                        MethodMemberAccess::Family => "protected ",
+                        MethodMemberAccess::Private => "private ",
+                        MethodMemberAccess::PrivateScope => "",
+                        MethodMemberAccess::Public => "public ",
+                    };
+
+                    print!("{access}{return_type} {name}(");
+
+                    if let Ok(iter) = signature.parameters.iter() {
+                        let params = iter
+                            .flatten()
+                            .map(|param| {
+                                // Turn this BaseHandle into a readable string
+                                match param.handle_type() {
+                                    Some(HandleType::TypeDefinition) => {
+                                        match param
+                                            .to_handle::<TypeDefinitionHandle>()
+                                            .and_then(|hdl| hdl.to_data(metadata))
+                                            .and_then(|typ| typ.get_full_name())
+                                        {
+                                            Ok(str) => str,
+                                            Err(_) => "<unknown>".to_string(),
+                                        }
+                                    }
+                                    _ => format!(
+                                        "{:?}",
+                                        param.handle_type().unwrap_or(HandleType::Null)
+                                    ),
+                                }
+                            })
+                            .collect::<Vec<_>>()
+                            .join(", ");
+
+                        print!("{params}");
                     }
 
-                    _ => {
-                        println!(
-                            " - {name} ({:?})",
-                            signature
-                                .type_handle
-                                .handle_type()
-                                .unwrap_or(HandleType::Null)
-                        );
+                    print!(") //");
+
+                    if let Some(&va) = method_ptrs.get(&method.handle()) {
+                        if let Ok(rva) = pe.pe().va_to_rva(va) {
+                            print!(" RVA: {rva:#x}");
+                        } else {
+                            print!(" VA: {va:#x}");
+                        }
                     }
+
+                    print!(" Conv: {:?}", signature.calling_convention);
+                    println!();
                 }
             }
         }

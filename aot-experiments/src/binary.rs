@@ -70,6 +70,13 @@ impl<'a> NativeAotBinary<'a> {
     }
 }
 
+// Basic struct stuff
+impl<'a> NativeAotBinary<'a> {
+    pub fn pe(&self) -> PeFile<'a> {
+        self.pe
+    }
+}
+
 // RTR stuff
 impl<'a> NativeAotBinary<'a> {
     pub fn rtr_header(&self) -> &ReadyToRunHeader<'a> {

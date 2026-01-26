@@ -215,7 +215,9 @@ define_handle!(FieldHandle, Field); // 35
 define_handle!(FieldSignatureHandle, FieldSignature); // 36
 define_handle!(GenericParameterHandle, GenericParameter); // 38
 define_handle!(MethodHandle, Method); // 40
+define_handle!(MethodSignatureHandle, MethodSignature); // 43
 define_handle!(NamespaceDefinitionHandle, NamespaceDefinition); // 47
+define_handle!(ParameterHandle, Parameter); // 49
 define_handle!(PropertyHandle, Property); // 51
 define_handle!(QualifiedMethodHandle, QualifiedMethod); // 54
 define_handle!(ScopeDefinitionHandle, ScopeDefinition); // 56

@@ -3,8 +3,8 @@ use paste::paste;
 use crate::{
     embedded_meta::handles::{
         BaseHandle, CustomAttributeHandle, EventHandle, FieldHandle, GenericParameterHandle,
-        MethodHandle, NamespaceDefinitionHandle, PropertyHandle, ScopeDefinitionHandle,
-        TypeDefinitionHandle, TypeForwarderHandle,
+        MethodHandle, NamespaceDefinitionHandle, ParameterHandle, PropertyHandle,
+        ScopeDefinitionHandle, TypeDefinitionHandle, TypeForwarderHandle,
     },
     native_format::reader::NativeReadable,
 };
@@ -121,6 +121,7 @@ define_collection!(
     NamespaceDefinitionHandleCollection,
     NamespaceDefinitionHandle
 );
+define_collection!(ParameterHandleCollection, ParameterHandle);
 define_collection!(PropertyHandleCollection, PropertyHandle);
 define_collection!(ScopeDefinitionHandleCollection, ScopeDefinitionHandle);
 define_collection!(TypeDefinitionHandleCollection, TypeDefinitionHandle);

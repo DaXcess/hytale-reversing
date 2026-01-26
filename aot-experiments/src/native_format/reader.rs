@@ -266,7 +266,10 @@ where
 }
 
 mod native_reader_impls {
-    use crate::native_format::reader::NativeReadable;
+    use crate::{
+        embedded_meta::flags::{MethodAttributes, SignatureCallingConvention},
+        native_format::reader::NativeReadable,
+    };
 
     impl<'a> NativeReadable<'a> for String {
         fn read(
@@ -303,6 +306,33 @@ mod native_reader_impls {
             offset: &mut usize,
         ) -> crate::error::Result<Self> {
             reader.decode_unsigned(offset)
+        }
+    }
+
+    impl<'a> NativeReadable<'a> for i32 {
+        fn read(
+            reader: &super::NativeReader<'a>,
+            offset: &mut usize,
+        ) -> crate::error::Result<Self> {
+            reader.decode_signed(offset)
+        }
+    }
+
+    impl<'a> NativeReadable<'a> for MethodAttributes {
+        fn read(
+            reader: &super::NativeReader<'a>,
+            offset: &mut usize,
+        ) -> crate::error::Result<Self> {
+            <u32 as NativeReadable>::read(reader, offset).map(MethodAttributes::new)
+        }
+    }
+
+    impl<'a> NativeReadable<'a> for SignatureCallingConvention {
+        fn read(
+            reader: &super::NativeReader<'a>,
+            offset: &mut usize,
+        ) -> crate::error::Result<Self> {
+            <u8 as NativeReadable>::read(reader, offset).map(SignatureCallingConvention::from)
         }
     }
 }

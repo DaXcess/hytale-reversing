@@ -1,4 +1,5 @@
 pub mod collections;
+pub mod flags;
 pub mod handles;
 pub mod utils;
 
@@ -7,14 +8,15 @@ use crate::{
         collections::{
             ByteCollection, CustomAttributeHandleCollection, EventHandleCollection,
             FieldHandleCollection, GenericParameterHandleCollection, HandleCollection,
-            MethodHandleCollection, NamespaceDefinitionHandleCollection, PropertyHandleCollection,
-            ScopeDefinitionHandleCollection, TypeDefinitionHandleCollection,
-            TypeForwarderHandleCollection,
+            MethodHandleCollection, NamespaceDefinitionHandleCollection, ParameterHandleCollection,
+            PropertyHandleCollection, ScopeDefinitionHandleCollection,
+            TypeDefinitionHandleCollection, TypeForwarderHandleCollection,
         },
+        flags::{MethodAttributes, SignatureCallingConvention},
         handles::{
             BaseHandle, ConstantStringValueHandle, FieldHandle, FieldSignatureHandle, MethodHandle,
-            NamespaceDefinitionHandle, QualifiedMethodHandle, ScopeDefinitionHandle,
-            TypeDefinitionHandle,
+            MethodSignatureHandle, NamespaceDefinitionHandle, QualifiedMethodHandle,
+            ScopeDefinitionHandle, TypeDefinitionHandle,
         },
     },
     error::{AotError, Result},
@@ -183,10 +185,13 @@ impl_handle!(TypeDefinition, TypeDefinitionHandle, {
 });
 
 impl_handle!(Method, MethodHandle, {
-    flags: u32,
+    flags: MethodAttributes,
     impl_flags: u32,
-    name: ConstantStringValueHandle
-    // Unfinished
+    name: ConstantStringValueHandle,
+    signature: MethodSignatureHandle,
+    parameters: ParameterHandleCollection<'a>,
+    generic_parameters: GenericParameterHandleCollection<'a>,
+    custom_attributes: CustomAttributeHandleCollection<'a>
 });
 
 impl_handle!(Field, FieldHandle, {
@@ -200,4 +205,12 @@ impl_handle!(Field, FieldHandle, {
 
 impl_handle!(FieldSignature, FieldSignatureHandle, {
     type_handle: BaseHandle,
+});
+
+impl_handle!(MethodSignature, MethodSignatureHandle, {
+    calling_convention: SignatureCallingConvention,
+    generic_parameter_count: i32,
+    return_type: BaseHandle,
+    parameters: HandleCollection<'a>,
+    var_arg_parameters: HandleCollection<'a>
 });
