@@ -203,7 +203,7 @@ fn get_types(pe: NativeAotBinary<'_>) -> Result<()> {
 
                         _ => {
                             println!(
-                                " - {name} ({:?})",
+                                "  * {name} ({:?})",
                                 signature
                                     .type_handle
                                     .handle_type()
