@@ -10,7 +10,7 @@ num_enum = "0.7.5"
 paste = "1.0.15"
 patternscan = "1.2.0"
 pelite = "0.10.0"
-thiserror = "2.0.17"
+thiserror = "2.0.18"
 clap = { version = "4.5.54", features = ["derive"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"

@@ -15,9 +15,12 @@ use pelite::pe64::{Pe, PeFile};
 use crate::{
     binary::{NativeAotBinary, headers::rtr::ReflectionMapBlob},
     embedded_meta::{
-        Method, TypeDefinition,
+        MetadataReader, Method, TypeDefinition, TypeInstantiationSignature, TypeSpecification,
         flags::MethodMemberAccess,
-        handles::{BaseHandle, HandleType, MethodHandle, TypeDefinitionHandle},
+        handles::{
+            BaseHandle, HandleType, MethodHandle, TypeDefinitionHandle,
+            TypeInstantiationSignatureHandle, TypeSpecificationHandle,
+        },
     },
 };
 
@@ -151,23 +154,7 @@ fn get_types(pe: NativeAotBinary<'_>) -> Result<()> {
             let type_name = typ.get_full_name()?;
 
             if !typ.base_type.is_nil() {
-                let base_name = match typ.base_type.handle_type() {
-                    Some(HandleType::TypeDefinition) => {
-                        match typ
-                            .base_type
-                            .to_handle::<TypeDefinitionHandle>()?
-                            .to_data(metadata)
-                            .and_then(|dat| dat.get_full_name())
-                        {
-                            Ok(name) => name,
-                            Err(_) => "Unknown TypeDefinition".to_string(),
-                        }
-                    }
-                    _ => format!(
-                        "{:?}",
-                        typ.base_type.handle_type().unwrap_or(HandleType::Null)
-                    ),
-                };
+                let base_name = get_type_name_from_handle(typ.base_type, metadata)?;
 
                 println!("{type_name} ({base_name})");
             } else {
@@ -185,32 +172,10 @@ fn get_types(pe: NativeAotBinary<'_>) -> Result<()> {
                     let name = field.name.to_data(metadata)?.value;
                     let signature = field.signature.to_data(metadata)?;
 
-                    match signature.type_handle.handle_type() {
-                        Some(HandleType::TypeDefinition) => {
-                            println!(
-                                "  * {name} ({})",
-                                match signature
-                                    .type_handle
-                                    .to_handle::<TypeDefinitionHandle>()?
-                                    .to_data(metadata)
-                                    .and_then(|dat| dat.get_full_name())
-                                {
-                                    Ok(name) => name,
-                                    Err(_) => "Unknown TypeDefinition".to_string(),
-                                }
-                            );
-                        }
+                    let type_name = get_type_name_from_handle(signature.type_handle, metadata)
+                        .unwrap_or_else(|_| "Unknown TypeDefinition".to_string());
 
-                        _ => {
-                            println!(
-                                "  * {name} ({:?})",
-                                signature
-                                    .type_handle
-                                    .handle_type()
-                                    .unwrap_or(HandleType::Null)
-                            );
-                        }
-                    }
+                    println!("  * {name} ({type_name})");
                 }
             }
 
@@ -482,4 +447,40 @@ fn dump_ida(pe: NativeAotBinary<'_>) -> Result<()> {
     eprintln!("Definition written to 'hytale_def.json'");
 
     Ok(())
+}
+
+fn get_type_name_from_handle(handle: BaseHandle, reader: MetadataReader<'_>) -> Result<String> {
+    let value = match handle.handle_type() {
+        Some(HandleType::TypeDefinition) => {
+            let typedef = handle
+                .to_handle::<TypeDefinitionHandle>()?
+                .to_data(reader)?;
+
+            format!("{}", typedef.get_full_name()?)
+        }
+        Some(HandleType::TypeSpecification) => {
+            let typespec = handle
+                .to_handle::<TypeSpecificationHandle>()?
+                .to_data(reader)?;
+
+            get_type_name_from_handle(typespec.signature, reader)?
+        }
+        Some(HandleType::TypeInstantiationSignature) => {
+            let typeinst = handle
+                .to_handle::<TypeInstantiationSignatureHandle>()?
+                .to_data(reader)?;
+
+            let generic_type_name = get_type_name_from_handle(typeinst.generic_type, reader)?;
+            let mut generic_type_args = vec![];
+
+            for typ in typeinst.generic_args.iter()?.flatten() {
+                generic_type_args.push(get_type_name_from_handle(typ, reader)?);
+            }
+
+            format!("{generic_type_name}<{}>", generic_type_args.join(", "))
+        }
+        _ => format!("{:?}", handle.handle_type().unwrap_or(HandleType::Null)),
+    };
+
+    Ok(value)
 }

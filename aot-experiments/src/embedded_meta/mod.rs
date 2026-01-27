@@ -16,7 +16,8 @@ use crate::{
         handles::{
             BaseHandle, ConstantStringValueHandle, FieldHandle, FieldSignatureHandle, MethodHandle,
             MethodSignatureHandle, NamespaceDefinitionHandle, QualifiedMethodHandle,
-            ScopeDefinitionHandle, TypeDefinitionHandle,
+            ScopeDefinitionHandle, TypeDefinitionHandle, TypeInstantiationSignatureHandle,
+            TypeSpecificationHandle,
         },
     },
     error::{AotError, Result},
@@ -213,4 +214,13 @@ impl_handle!(MethodSignature, MethodSignatureHandle, {
     return_type: BaseHandle,
     parameters: HandleCollection<'a>,
     var_arg_parameters: HandleCollection<'a>
+});
+
+impl_handle!(TypeSpecification, TypeSpecificationHandle, {
+    signature: BaseHandle
+});
+
+impl_handle!(TypeInstantiationSignature, TypeInstantiationSignatureHandle, {
+    generic_type: BaseHandle,
+    generic_args: HandleCollection<'a>,
 });

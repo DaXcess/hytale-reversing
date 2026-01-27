@@ -223,3 +223,5 @@ define_handle!(QualifiedMethodHandle, QualifiedMethod); // 54
 define_handle!(ScopeDefinitionHandle, ScopeDefinition); // 56
 define_handle!(TypeDefinitionHandle, TypeDefinition); // 58
 define_handle!(TypeForwarderHandle, TypeForwarder); // 59
+define_handle!(TypeInstantiationSignatureHandle, TypeInstantiationSignature); // 60
+define_handle!(TypeSpecificationHandle, TypeSpecification); // 62
