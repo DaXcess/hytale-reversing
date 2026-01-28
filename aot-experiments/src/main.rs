@@ -228,22 +228,8 @@ fn get_types(pe: NativeAotBinary<'_>) -> Result<()> {
                             .flatten()
                             .map(|param| {
                                 // Turn this BaseHandle into a readable string
-                                match param.handle_type() {
-                                    Some(HandleType::TypeDefinition) => {
-                                        match param
-                                            .to_handle::<TypeDefinitionHandle>()
-                                            .and_then(|hdl| hdl.to_data(metadata))
-                                            .and_then(|typ| typ.get_full_name())
-                                        {
-                                            Ok(str) => str,
-                                            Err(_) => "<unknown>".to_string(),
-                                        }
-                                    }
-                                    _ => format!(
-                                        "{:?}",
-                                        param.handle_type().unwrap_or(HandleType::Null)
-                                    ),
-                                }
+                                get_type_name_from_handle(param, metadata)
+                                    .unwrap_or_else(|_| "<unknown>".to_string())
                             })
                             .collect::<Vec<_>>()
                             .join(", ");
