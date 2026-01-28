@@ -208,6 +208,7 @@ impl Debug for BaseHandle {
     }
 }
 
+define_handle!(ByReferenceSignatureHandle, ByReferenceSignature); // 2
 define_handle!(ConstantStringValueHandle, ConstantStringValue); // 26
 define_handle!(CustomAttributeHandle, CustomAttribute); // 33
 define_handle!(EventHandle, Event); // 34
@@ -216,6 +217,10 @@ define_handle!(FieldSignatureHandle, FieldSignature); // 36
 define_handle!(GenericParameterHandle, GenericParameter); // 38
 define_handle!(MethodHandle, Method); // 40
 define_handle!(MethodSignatureHandle, MethodSignature); // 43
+define_handle!(
+    MethodTypeVariableSignatureHandle,
+    MethodTypeVariableSignature
+); // 44
 define_handle!(NamespaceDefinitionHandle, NamespaceDefinition); // 47
 define_handle!(ParameterHandle, Parameter); // 49
 define_handle!(PropertyHandle, Property); // 51
@@ -225,3 +230,4 @@ define_handle!(TypeDefinitionHandle, TypeDefinition); // 58
 define_handle!(TypeForwarderHandle, TypeForwarder); // 59
 define_handle!(TypeInstantiationSignatureHandle, TypeInstantiationSignature); // 60
 define_handle!(TypeSpecificationHandle, TypeSpecification); // 62
+define_handle!(TypeVariableSignatureHandle, TypeVariableSignature); // 63

@@ -14,10 +14,11 @@ use crate::{
         },
         flags::{MethodAttributes, SignatureCallingConvention},
         handles::{
-            BaseHandle, ConstantStringValueHandle, FieldHandle, FieldSignatureHandle, MethodHandle,
-            MethodSignatureHandle, NamespaceDefinitionHandle, QualifiedMethodHandle,
+            BaseHandle, ByReferenceSignatureHandle, ConstantStringValueHandle, FieldHandle,
+            FieldSignatureHandle, GenericParameterHandle, MethodHandle, MethodSignatureHandle,
+            MethodTypeVariableSignatureHandle, NamespaceDefinitionHandle, QualifiedMethodHandle,
             ScopeDefinitionHandle, TypeDefinitionHandle, TypeInstantiationSignatureHandle,
-            TypeSpecificationHandle,
+            TypeSpecificationHandle, TypeVariableSignatureHandle,
         },
     },
     error::{AotError, Result},
@@ -223,4 +224,25 @@ impl_handle!(TypeSpecification, TypeSpecificationHandle, {
 impl_handle!(TypeInstantiationSignature, TypeInstantiationSignatureHandle, {
     generic_type: BaseHandle,
     generic_args: HandleCollection<'a>,
+});
+
+impl_handle!(ByReferenceSignature, ByReferenceSignatureHandle, {
+    type_handle: BaseHandle
+});
+
+impl_handle!(MethodTypeVariableSignature, MethodTypeVariableSignatureHandle, {
+    number: i32
+});
+
+impl_handle!(TypeVariableSignature, TypeVariableSignatureHandle, {
+    number: i32
+});
+
+impl_handle!(GenericParameter, GenericParameterHandle, {
+    number: u16,
+    flags: u32,
+    kind: u8,
+    name: ConstantStringValueHandle,
+    constraints: HandleCollection<'a>,
+    custom_attributes: CustomAttributeHandleCollection<'a>,
 });

@@ -18,8 +18,9 @@ use crate::{
         MetadataReader, Method, TypeDefinition, TypeInstantiationSignature, TypeSpecification,
         flags::MethodMemberAccess,
         handles::{
-            BaseHandle, HandleType, MethodHandle, TypeDefinitionHandle,
-            TypeInstantiationSignatureHandle, TypeSpecificationHandle,
+            BaseHandle, ByReferenceSignatureHandle, HandleType, MethodHandle,
+            MethodTypeVariableSignatureHandle, TypeDefinitionHandle,
+            TypeInstantiationSignatureHandle, TypeSpecificationHandle, TypeVariableSignatureHandle,
         },
     },
 };
@@ -151,10 +152,11 @@ fn get_types(pe: NativeAotBinary<'_>) -> Result<()> {
         let types = def.get_all_types()?;
 
         for typ in types {
-            let type_name = typ.get_full_name()?;
+            let type_name = typ.get_full_name_with_generics()?;
 
             if !typ.base_type.is_nil() {
-                let base_name = get_type_name_from_handle(typ.base_type, metadata)?;
+                let base_name =
+                    get_type_name_from_handle(typ.base_type, ParentInfo::typ(&typ), metadata)?;
 
                 println!("{type_name} ({base_name})");
             } else {
@@ -172,8 +174,12 @@ fn get_types(pe: NativeAotBinary<'_>) -> Result<()> {
                     let name = field.name.to_data(metadata)?.value;
                     let signature = field.signature.to_data(metadata)?;
 
-                    let type_name = get_type_name_from_handle(signature.type_handle, metadata)
-                        .unwrap_or_else(|_| "Unknown TypeDefinition".to_string());
+                    let type_name = get_type_name_from_handle(
+                        signature.type_handle,
+                        ParentInfo::typ(&typ),
+                        metadata,
+                    )
+                    .unwrap_or_else(|_| "Unknown TypeDefinition".to_string());
 
                     println!("  * {name} ({type_name})");
                 }
@@ -194,19 +200,30 @@ fn get_types(pe: NativeAotBinary<'_>) -> Result<()> {
                         continue;
                     };
 
+                    let generics = method.generic_parameters.iter().ok().and_then(|mut iter| {
+                        let names = iter
+                            .try_fold(Vec::new(), |mut acc, hdl| {
+                                let hdl = hdl?;
+                                let param = hdl.to_data(metadata)?;
+                                let name = param.name.to_data(metadata)?;
+                                acc.push(name.value);
+
+                                Ok::<_, anyhow::Error>(acc)
+                            })
+                            .ok()?;
+
+                        if names.is_empty() {
+                            return None;
+                        }
+
+                        Some(format!("<{}>", names.join(", ")))
+                    });
+
                     let return_type = match signature.return_type {
                         t if t.is_nil() => "void".to_string(),
-                        t if t.handle_type() == Some(HandleType::TypeDefinition) => {
-                            let Ok(typ) = t
-                                .to_handle::<TypeDefinitionHandle>()
-                                .and_then(|hdl| hdl.to_data(metadata))
-                            else {
-                                continue;
-                            };
-
-                            typ.get_full_name()?
+                        t => {
+                            get_type_name_from_handle(t, ParentInfo::both(&method, &typ), metadata)?
                         }
-                        _ => "<unknown>".to_string(),
                     };
 
                     print!("  * ");
@@ -221,15 +238,22 @@ fn get_types(pe: NativeAotBinary<'_>) -> Result<()> {
                         MethodMemberAccess::Public => "public ",
                     };
 
-                    print!("{access}{return_type} {name}(");
+                    print!(
+                        "{access}{return_type} {name}{}(",
+                        generics.as_deref().unwrap_or("")
+                    );
 
                     if let Ok(iter) = signature.parameters.iter() {
                         let params = iter
                             .flatten()
                             .map(|param| {
                                 // Turn this BaseHandle into a readable string
-                                get_type_name_from_handle(param, metadata)
-                                    .unwrap_or_else(|_| "<unknown>".to_string())
+                                get_type_name_from_handle(
+                                    param,
+                                    ParentInfo::both(&method, &typ),
+                                    metadata,
+                                )
+                                .unwrap_or_else(|_| "<unknown>".to_string())
                             })
                             .collect::<Vec<_>>()
                             .join(", ");
@@ -345,7 +369,7 @@ fn dump_ida(pe: NativeAotBinary<'_>) -> Result<()> {
                         continue;
                     };
 
-                    name = Some(format!("{}_vtbl", type_def.get_full_name()?));
+                    name = Some(format!("{}_vtbl", type_def.get_full_name_with_generics()?));
                     break;
                 }
             }
@@ -409,7 +433,7 @@ fn dump_ida(pe: NativeAotBinary<'_>) -> Result<()> {
                     continue;
                 };
 
-                name = Some(type_def.get_full_name()?);
+                name = Some(type_def.get_full_name_with_generics()?);
                 break;
             }
         }
@@ -435,35 +459,165 @@ fn dump_ida(pe: NativeAotBinary<'_>) -> Result<()> {
     Ok(())
 }
 
-fn get_type_name_from_handle(handle: BaseHandle, reader: MetadataReader<'_>) -> Result<String> {
+#[derive(Clone, Copy)]
+struct ParentInfo<'a> {
+    method: Option<&'a Method<'a>>,
+    typ: Option<&'a TypeDefinition<'a>>,
+}
+
+impl<'a> ParentInfo<'a> {
+    fn none() -> Self {
+        Self {
+            method: None,
+            typ: None,
+        }
+    }
+
+    fn typ(typ: &'a TypeDefinition<'a>) -> Self {
+        Self {
+            method: None,
+            typ: Some(typ),
+        }
+    }
+
+    fn both(method: &'a Method<'a>, typ: &'a TypeDefinition<'a>) -> Self {
+        Self {
+            method: Some(method),
+            typ: Some(typ),
+        }
+    }
+
+    fn has_none(&self) -> bool {
+        self.method.is_none() && self.typ.is_none()
+    }
+
+    fn has_method(&self) -> bool {
+        self.method.is_some()
+    }
+
+    fn has_type(&self) -> bool {
+        self.typ.is_some()
+    }
+
+    fn get_method_generic(&self, reader: MetadataReader<'a>, index: usize) -> Option<String> {
+        Some(
+            self.method?
+                .generic_parameters
+                .iter()
+                .ok()?
+                .collect::<Vec<_>>()
+                .get(index)?
+                .as_ref()
+                .ok()?
+                .to_data(reader)
+                .ok()?
+                .name
+                .to_data(reader)
+                .ok()?
+                .value,
+        )
+    }
+
+    fn get_type_generic(&self, reader: MetadataReader<'a>, index: usize) -> Option<String> {
+        Some(
+            self.typ?
+                .generic_parameters
+                .iter()
+                .ok()?
+                .collect::<Vec<_>>()
+                .get(index)?
+                .as_ref()
+                .ok()?
+                .to_data(reader)
+                .ok()?
+                .name
+                .to_data(reader)
+                .ok()?
+                .value,
+        )
+    }
+}
+
+fn get_type_name_from_handle(
+    handle: BaseHandle,
+    parent: ParentInfo,
+    reader: MetadataReader<'_>,
+) -> Result<String> {
     let value = match handle.handle_type() {
         Some(HandleType::TypeDefinition) => {
             let typedef = handle
                 .to_handle::<TypeDefinitionHandle>()?
                 .to_data(reader)?;
 
-            format!("{}", typedef.get_full_name()?)
+            format!(
+                "{}",
+                if parent.has_none() {
+                    typedef.get_full_name_with_generics()
+                } else {
+                    typedef.get_full_name()
+                }?
+            )
         }
         Some(HandleType::TypeSpecification) => {
             let typespec = handle
                 .to_handle::<TypeSpecificationHandle>()?
                 .to_data(reader)?;
 
-            get_type_name_from_handle(typespec.signature, reader)?
+            get_type_name_from_handle(typespec.signature, parent, reader)?
         }
+        // Generic type
         Some(HandleType::TypeInstantiationSignature) => {
             let typeinst = handle
                 .to_handle::<TypeInstantiationSignatureHandle>()?
                 .to_data(reader)?;
 
-            let generic_type_name = get_type_name_from_handle(typeinst.generic_type, reader)?;
+            let generic_type_name =
+                get_type_name_from_handle(typeinst.generic_type, parent, reader)?;
             let mut generic_type_args = vec![];
 
             for typ in typeinst.generic_args.iter()?.flatten() {
-                generic_type_args.push(get_type_name_from_handle(typ, reader)?);
+                generic_type_args.push(get_type_name_from_handle(typ, parent, reader)?);
             }
 
             format!("{generic_type_name}<{}>", generic_type_args.join(", "))
+        }
+        // ref Type
+        Some(HandleType::ByReferenceSignature) => {
+            let refsig = handle
+                .to_handle::<ByReferenceSignatureHandle>()?
+                .to_data(reader)?;
+
+            let name = get_type_name_from_handle(refsig.type_handle, parent, reader)?;
+
+            format!("ref {name}")
+        }
+        Some(HandleType::MethodTypeVariableSignature) if parent.has_method() => {
+            let mtvarsig = handle
+                .to_handle::<MethodTypeVariableSignatureHandle>()?
+                .to_data(reader)?;
+            let index = mtvarsig.number as usize;
+
+            format!(
+                "{}",
+                parent
+                    .get_method_generic(reader, index)
+                    .as_deref()
+                    .unwrap_or("Unknown")
+            )
+        }
+        Some(HandleType::TypeVariableSignature) if parent.has_type() => {
+            let mtvarsig = handle
+                .to_handle::<TypeVariableSignatureHandle>()?
+                .to_data(reader)?;
+            let index = mtvarsig.number as usize;
+
+            format!(
+                "{}",
+                parent
+                    .get_type_generic(reader, index)
+                    .as_deref()
+                    .unwrap_or("Unknown")
+            )
         }
         _ => format!("{:?}", handle.handle_type().unwrap_or(HandleType::Null)),
     };

@@ -1,7 +1,7 @@
 use crate::{
     embedded_meta::{
         MetadataReader, NamespaceDefinition, ScopeDefinition, TypeDefinition,
-        handles::{Handle, NamespaceDefinitionHandle},
+        handles::{GenericParameterHandle, Handle, NamespaceDefinitionHandle},
     },
     error::Result,
 };
@@ -116,7 +116,32 @@ impl<'a> TypeDefinition<'a> {
 
         Ok(format!(
             "{}.{type_name}",
-            ns_names.into_iter().rev().collect::<Vec<_>>().join(".")
+            ns_names.into_iter().rev().collect::<Vec<_>>().join("."),
         ))
+    }
+
+    pub fn get_full_name_with_generics(&self) -> Result<String> {
+        let full_name = self.get_full_name()?;
+
+        let generics = self.generic_parameters.iter().ok().and_then(|mut iter| {
+            let names = iter
+                .try_fold(Vec::new(), |mut acc, hdl| {
+                    let hdl = hdl?;
+                    let param = hdl.to_data(self.reader)?;
+                    let name = param.name.to_data(self.reader)?;
+                    acc.push(name.value);
+
+                    Ok::<_, anyhow::Error>(acc)
+                })
+                .ok()?;
+
+            if names.is_empty() {
+                return None;
+            }
+
+            Some(format!("<{}>", names.join(", ")))
+        });
+
+        Ok(format!("{full_name}{}", generics.as_deref().unwrap_or("")))
     }
 }
